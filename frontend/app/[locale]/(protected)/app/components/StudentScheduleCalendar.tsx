@@ -9,13 +9,21 @@ import {
   type ScheduleEventKind,
 } from "../lib/mock-student-data";
 import type { CalendarEvent } from "../lib/calendar-event-types";
+import {
+  buildHourMarks,
+  buildSlotMarks,
+  computeEventGeometry,
+  DAY_END_MINUTES,
+  DAY_START_MINUTES,
+  formatHourLabel,
+  gridHeight,
+  layoutDayEvents,
+  minutesToTime,
+  SLOT_MINUTES,
+} from "../lib/schedule-grid-utils";
 
-const DAY_START_MINUTES = 8 * 60;
-const DAY_END_MINUTES = 21 * 60;
-const SLOT_MINUTES = 30;
 const PIXELS_PER_MINUTE = 2;
-const TOTAL_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
-const GRID_HEIGHT = TOTAL_MINUTES * PIXELS_PER_MINUTE;
+const GRID_HEIGHT = gridHeight(PIXELS_PER_MINUTE);
 const TIME_AXIS_WIDTH = 52;
 const GAP_PX = 4;
 
@@ -46,107 +54,6 @@ const KIND_STRONG: Record<ScheduleEventKind, string> = {
   extra: "var(--schedule-extra-strong)",
   exam: "var(--schedule-exam-strong)",
 };
-
-function timeToMinutes(value: string): number {
-  const [hour = 0, minute = 0] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function eventsOverlap(
-  a: { startMin: number; endMin: number },
-  b: { startMin: number; endMin: number },
-): boolean {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
-}
-
-type TimedEvent = CalendarEvent & {
-  startMin: number;
-  endMin: number;
-};
-
-type LaidOutEvent = TimedEvent & {
-  column: number;
-  totalColumns: number;
-};
-
-function layoutDayEvents(events: CalendarEvent[]): LaidOutEvent[] {
-  const items: TimedEvent[] = events
-    .map((e) => ({
-      ...e,
-      startMin: timeToMinutes(e.startTime),
-      endMin: timeToMinutes(e.endTime),
-    }))
-    .filter((e) => e.endMin > e.startMin)
-    .sort((a, b) => a.startMin - b.startMin);
-
-  if (items.length === 0) return [];
-
-  const clusters: TimedEvent[][] = [];
-  for (const ev of items) {
-    let merged = false;
-    for (const cluster of clusters) {
-      if (cluster.some((c) => eventsOverlap(c, ev))) {
-        cluster.push(ev);
-        merged = true;
-        break;
-      }
-    }
-    if (!merged) clusters.push([ev]);
-  }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < clusters.length; i++) {
-      for (let j = i + 1; j < clusters.length; j++) {
-        const overlaps = clusters[i].some((a) =>
-          clusters[j].some((b) => eventsOverlap(a, b)),
-        );
-        if (overlaps) {
-          clusters[i] = [...clusters[i], ...clusters[j]];
-          clusters.splice(j, 1);
-          changed = true;
-          break;
-        }
-      }
-      if (changed) break;
-    }
-  }
-
-  const result: LaidOutEvent[] = [];
-  for (const cluster of clusters) {
-    const columnEnds: number[] = [];
-    const assigned: { ev: TimedEvent; col: number }[] = [];
-    for (const ev of [...cluster].sort((a, b) => a.startMin - b.startMin)) {
-      let col = columnEnds.findIndex((end) => end <= ev.startMin);
-      if (col === -1) {
-        col = columnEnds.length;
-        columnEnds.push(ev.endMin);
-      } else {
-        columnEnds[col] = ev.endMin;
-      }
-      assigned.push({ ev, col });
-    }
-    const totalColumns = columnEnds.length;
-    for (const { ev, col } of assigned) {
-      result.push({ ...ev, column: col, totalColumns });
-    }
-  }
-  return result;
-}
-
-function formatHourLabel(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const display = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${display} ${suffix}`;
-}
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -205,17 +112,8 @@ export function StudentScheduleCalendar({
   const showNowLine =
     isSelectedToday && nowMinutes >= DAY_START_MINUTES && nowMinutes <= DAY_END_MINUTES;
 
-  const hourMarks = useMemo(() => {
-    const marks: number[] = [];
-    for (let m = DAY_START_MINUTES; m <= DAY_END_MINUTES; m += 60) marks.push(m);
-    return marks;
-  }, []);
-
-  const slotMarks = useMemo(() => {
-    const marks: number[] = [];
-    for (let m = DAY_START_MINUTES; m < DAY_END_MINUTES; m += SLOT_MINUTES) marks.push(m);
-    return marks;
-  }, []);
+  const hourMarks = useMemo(() => buildHourMarks(), []);
+  const slotMarks = useMemo(() => buildSlotMarks(), []);
 
   return (
     <div className="schedule-calendar mx-auto w-full max-w-lg">
@@ -257,16 +155,19 @@ export function StudentScheduleCalendar({
             {hourMarks.map((min) => (
               <div
                 key={min}
-                className="absolute right-2 -translate-y-1/2 whitespace-nowrap"
+                className="absolute right-2 -translate-y-full whitespace-nowrap"
                 style={{ top: (min - DAY_START_MINUTES) * PIXELS_PER_MINUTE }}
               >
-                {formatHourLabel(min)}
+                {formatHourLabel(min, locale)}
               </div>
             ))}
           </div>
 
           {/* Grid + events */}
-          <div className="relative min-w-0 flex-1" style={{ height: GRID_HEIGHT }}>
+          <div
+            className="relative min-w-0 flex-1 overflow-hidden"
+            style={{ height: GRID_HEIGHT }}
+          >
             {hourMarks.map((min) => (
               <div
                 key={min}
@@ -302,10 +203,10 @@ export function StudentScheduleCalendar({
             )}
 
             {laidOut.map((event) => {
-              const top = (event.startMin - DAY_START_MINUTES) * PIXELS_PER_MINUTE;
-              const height = Math.max(
-                (event.endMin - event.startMin) * PIXELS_PER_MINUTE - GAP_PX,
-                44,
+              const { top, height } = computeEventGeometry(
+                event.startMin,
+                event.endMin,
+                { pixelsPerMinute: PIXELS_PER_MINUTE, gapPx: GAP_PX, minHeight: 44 },
               );
               const widthPct = 100 / event.totalColumns;
               const leftPct = (event.column / event.totalColumns) * 100;

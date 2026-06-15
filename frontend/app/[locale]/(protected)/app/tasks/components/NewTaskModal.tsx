@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, X } from "lucide-react";
 import { courseCodeFromCourse } from "../lib/map-assignment";
-import type { TaskPriority, TaskStatus } from "../lib/task-types";
+import type { StudentTask, TaskPriority, TaskStatus } from "../lib/task-types";
 import { STATUS_LABELS } from "../lib/task-styles";
 import { useStudentTasks } from "../context/student-tasks-context";
 
@@ -14,6 +14,12 @@ interface NewTaskModalProps {
   defaultStatus?: TaskStatus;
   defaultCourseId?: string;
   defaultClassSessionId?: string | null;
+  /** Si se pasa, el modal entra en modo edición. */
+  task?: StudentTask | null;
+  /** Se invoca tras crear una tarea (no en edición). */
+  onCreated?: (assignmentId: string) => void;
+  /** Bloquea el selector de curso (p. ej. tareas de un curso concreto). */
+  lockCourse?: boolean;
 }
 
 export function NewTaskModal({
@@ -22,8 +28,12 @@ export function NewTaskModal({
   defaultStatus = "pending",
   defaultCourseId,
   defaultClassSessionId = null,
+  task = null,
+  onCreated,
+  lockCourse = false,
 }: NewTaskModalProps) {
-  const { courses, createTask } = useStudentTasks();
+  const { courses, createTask, updateTask } = useStudentTasks();
+  const isEditing = Boolean(task);
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -43,17 +53,30 @@ export function NewTaskModal({
   }, [open, onClose]);
 
   useEffect(() => {
-    if (open) {
-      setStatus(defaultStatus);
-      setError(null);
-      if (defaultCourseId) setCourseId(defaultCourseId);
-      else if (courses[0]) setCourseId(courses[0].id);
+    if (!open) return;
+    setError(null);
+    if (task) {
+      setTitle(task.title);
+      setCourseId(task.courseId);
+      setDeadline(task.dueDateIso);
+      setPriority(task.priority);
+      setDescription(task.description);
+      setStatus(task.status);
+      return;
     }
-  }, [open, defaultStatus, defaultCourseId, courses]);
+    setTitle("");
+    setDescription("");
+    setDeadline("");
+    setPriority("media");
+    setStatus(defaultStatus);
+    if (defaultCourseId) setCourseId(defaultCourseId);
+    else if (courses[0]) setCourseId(courses[0].id);
+    else setCourseId("");
+  }, [open, task, defaultStatus, defaultCourseId, courses]);
 
   if (!open) return null;
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!courseId || !deadline) {
       setError("Selecciona curso y fecha límite.");
@@ -63,32 +86,42 @@ export function NewTaskModal({
     setError(null);
     try {
       const deadlineIso = new Date(`${deadline}T23:59:59`).toISOString();
-      await createTask({
-        courseId,
-        title: title.trim(),
-        description: description.trim() || undefined,
-        deadline: deadlineIso,
-        priority,
-        status,
-        classSessionId: defaultClassSessionId,
-      });
-      setTitle("");
-      setDescription("");
-      setDeadline("");
+      if (isEditing && task) {
+        await updateTask(task.assignmentId, {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          deadline: deadlineIso,
+          priority,
+          status,
+        });
+      } else {
+        const assignmentId = await createTask({
+          courseId,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          deadline: deadlineIso,
+          priority,
+          status,
+          classSessionId: defaultClassSessionId,
+        });
+        if (assignmentId) onCreated?.(assignmentId);
+      }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo crear la tarea");
+      setError(err instanceof Error ? err.message : "No se pudo guardar la tarea");
     } finally {
       setSubmitting(false);
     }
   }
+
+  const courseLocked = lockCourse || isEditing;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Nueva tarea"
+      aria-label={isEditing ? "Editar tarea" : "Nueva tarea"}
       onClick={onClose}
     >
       <motion.div
@@ -99,7 +132,9 @@ export function NewTaskModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[var(--app-fg)]">Nueva tarea</h2>
+          <h2 className="text-lg font-semibold text-[var(--app-fg)]">
+            {isEditing ? "Editar tarea" : "Nueva tarea"}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -116,7 +151,7 @@ export function NewTaskModal({
           </p>
         )}
 
-        <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-[var(--app-fg-muted)]">
               Nombre de la tarea *
@@ -136,8 +171,8 @@ export function NewTaskModal({
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
               required
-              disabled={courses.length === 0}
-              className="w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)] px-3 py-2 text-sm text-[var(--app-fg)] focus:border-[var(--app-primary)] focus:outline-none"
+              disabled={courses.length === 0 || courseLocked}
+              className="w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)] px-3 py-2 text-sm text-[var(--app-fg)] focus:border-[var(--app-primary)] focus:outline-none disabled:opacity-60"
             >
               {courses.length === 0 ? (
                 <option value="">Sin cursos — crea uno en Estudios</option>
@@ -149,6 +184,11 @@ export function NewTaskModal({
                 ))
               )}
             </select>
+            {isEditing ? (
+              <p className="mt-1 text-[10px] text-[var(--app-fg-muted)]">
+                El curso no se puede cambiar al editar.
+              </p>
+            ) : null}
           </div>
 
           <div>
@@ -194,7 +234,7 @@ export function NewTaskModal({
           <div>
             <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[var(--app-fg-muted)]">
               <Clock className="h-3.5 w-3.5" aria-hidden />
-              Estado inicial
+              {isEditing ? "Estado" : "Estado inicial"}
             </label>
             <select
               value={status}
@@ -222,7 +262,13 @@ export function NewTaskModal({
               disabled={submitting || courses.length === 0}
               className="rounded-[var(--radius-md)] bg-[var(--accent)] px-[18px] py-[10px] text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
             >
-              {submitting ? "Creando…" : "Crear tarea"}
+              {submitting
+                ? isEditing
+                  ? "Guardando…"
+                  : "Creando…"
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Crear tarea"}
             </button>
           </div>
         </form>

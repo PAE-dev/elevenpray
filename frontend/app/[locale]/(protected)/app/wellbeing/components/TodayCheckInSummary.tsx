@@ -24,20 +24,17 @@ export function TodayCheckInSummary({ index = 0 }: { index?: number }) {
   const t = useTranslations("studentWellbeing");
   const { user } = useAuth();
   const firstName = user?.name?.trim().split(/\s+/)[0] ?? "estudiante";
-  const { startEditing } = useWellbeingCheckInContext();
+  const { startEditing, selectedMood, factors, note } = useWellbeingCheckInContext();
   const { entries } = useWellbeingDayContext();
-  const latestCheckin = [...entries].reverse().find((entry) => entry.entryType === "checkin");
-  if (!latestCheckin) return null;
 
-  const mood = (latestCheckin.payload.mood as MoodId | undefined) ?? "normal";
-  const factors = Array.isArray(latestCheckin.payload.factors)
-    ? latestCheckin.payload.factors.map(String)
-    : [];
-  const note =
-    typeof latestCheckin.payload.note === "string" && latestCheckin.payload.note.trim()
-      ? latestCheckin.payload.note
-      : null;
-  const MoodIcon = MOOD_ICONS[mood];
+  if (!selectedMood) return null;
+
+  const latestCheckin = [...entries].reverse().find((entry) => entry.entryType === "checkin");
+  const loggedAt = latestCheckin
+    ? format(new Date(latestCheckin.occurredAt), "HH:mm", { locale: es })
+    : null;
+
+  const MoodIcon = MOOD_ICONS[selectedMood];
   const delayStyle = { "--wellbeing-delay": `${index * 80}ms` } as React.CSSProperties;
 
   return (
@@ -54,13 +51,13 @@ export function TodayCheckInSummary({ index = 0 }: { index?: number }) {
             <div>
               <p className="text-sm text-[var(--app-fg-secondary)]">
                 {t("todaySummary.feeling")}{" "}
-                <span className="font-semibold text-[var(--app-fg)]">{t(`moods.${mood}`)}</span>
+                <span className="font-semibold text-[var(--app-fg)]">{t(`moods.${selectedMood}`)}</span>
               </p>
-              <p className="text-xs text-[var(--app-fg-muted)]">
-                {t("todaySummary.loggedAt", {
-                  time: format(new Date(latestCheckin.occurredAt), "HH:mm", { locale: es }),
-                })}
-              </p>
+              {loggedAt ? (
+                <p className="text-xs text-[var(--app-fg-muted)]">
+                  {t("todaySummary.loggedAt", { time: loggedAt })}
+                </p>
+              ) : null}
             </div>
           </div>
           <button
@@ -88,7 +85,7 @@ export function TodayCheckInSummary({ index = 0 }: { index?: number }) {
             ))}
           </div>
         ) : null}
-        {note ? <p className="mt-2 text-xs text-[var(--app-fg-muted)]">{note}</p> : null}
+        {note.trim() ? <p className="mt-2 text-xs text-[var(--app-fg-muted)]">{note}</p> : null}
       </div>
     </section>
   );

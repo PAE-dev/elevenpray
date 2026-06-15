@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Flag,
   Link2Off,
+  Pencil,
   Plus,
   Search,
   X,
@@ -35,6 +36,7 @@ export function ClassTaskSection({ course, cls }: ClassTaskSectionProps) {
   const { getTasksForCourse, updateTask, resolveServerCourseId } = useStudentTasks();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [defaultSessionId, setDefaultSessionId] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
 
@@ -99,7 +101,11 @@ export function ClassTaskSection({ course, cls }: ClassTaskSectionProps) {
       </div>
 
       {linkedTask ? (
-        <LinkedTaskCard task={linkedTask} onUnlink={() => void unlinkTask()} />
+        <LinkedTaskCard
+          task={linkedTask}
+          onUnlink={() => void unlinkTask()}
+          onEdit={() => setEditOpen(true)}
+        />
       ) : (
         <div className="rounded-[var(--radius-lg)] border-[0.5px] border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center">
           <p className="text-xs text-[var(--text-muted)]">
@@ -136,12 +142,33 @@ export function ClassTaskSection({ course, cls }: ClassTaskSectionProps) {
         }}
         defaultCourseId={serverCourseId}
         defaultClassSessionId={defaultSessionId}
+        lockCourse
+        onCreated={(assignmentId) => {
+          setLinkedTask(cls.id, assignmentId);
+        }}
       />
+
+      {linkedTask ? (
+        <NewTaskModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          task={linkedTask}
+          lockCourse
+        />
+      ) : null}
     </section>
   );
 }
 
-function LinkedTaskCard({ task, onUnlink }: { task: StudentTask; onUnlink: () => void }) {
+function LinkedTaskCard({
+  task,
+  onUnlink,
+  onEdit,
+}: {
+  task: StudentTask;
+  onUnlink: () => void;
+  onEdit: () => void;
+}) {
   const done = task.status === "done";
   return (
     <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border-[0.5px] border-[var(--border)] bg-[var(--bg-surface)] p-4">
@@ -185,15 +212,26 @@ function LinkedTaskCard({ task, onUnlink }: { task: StudentTask; onUnlink: () =>
           <p className="mt-2 text-xs text-[var(--text-body)]">{task.description}</p>
         ) : null}
       </div>
-      <button
-        type="button"
-        onClick={onUnlink}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)]"
-        aria-label="Desvincular tarea"
-        title="Desvincular tarea"
-      >
-        <Link2Off className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)]"
+          aria-label="Editar tarea"
+          title="Editar tarea"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onUnlink}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)]"
+          aria-label="Desvincular tarea"
+          title="Desvincular tarea"
+        >
+          <Link2Off className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

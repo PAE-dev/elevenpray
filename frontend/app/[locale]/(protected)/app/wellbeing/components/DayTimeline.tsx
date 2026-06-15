@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { BookOpen, Play, Smile, Sparkles, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type { DayEntryDto, DayEntryType } from "@/app/lib/day-entries-api";
 
@@ -27,8 +28,25 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+function dedupeCheckinEntries(entries: DayEntryDto[]): DayEntryDto[] {
+  const checkins = entries.filter((e) => e.entryType === "checkin");
+  if (checkins.length <= 1) return entries;
+
+  const latest = checkins[checkins.length - 1];
+  let kept = false;
+  return entries.filter((e) => {
+    if (e.entryType !== "checkin") return true;
+    if (!kept) {
+      kept = true;
+      return e.id === latest.id;
+    }
+    return false;
+  });
+}
+
 export function DayTimeline({ entries, title }: { entries: DayEntryDto[]; title?: string }) {
   const t = useTranslations("studentWellbeing");
+  const visibleEntries = useMemo(() => dedupeCheckinEntries(entries), [entries]);
 
   function getDescription(entry: DayEntryDto): string {
     if (entry.entryType === "checkin") {
@@ -56,11 +74,11 @@ export function DayTimeline({ entries, title }: { entries: DayEntryDto[]; title?
       <h3 className="mb-4 text-lg font-semibold text-[var(--app-fg)]">
         {title ?? t("timeline.title")}
       </h3>
-      {entries.length === 0 ? (
+      {visibleEntries.length === 0 ? (
         <p className="py-2 text-sm text-[var(--app-fg-muted)]">{t("timeline.empty")}</p>
       ) : (
         <div className="space-y-4">
-          {entries.map((entry, index) => {
+          {visibleEntries.map((entry, index) => {
             const Icon = ENTRY_ICONS[entry.entryType];
             const content = asString(entry.payload.content);
             return (

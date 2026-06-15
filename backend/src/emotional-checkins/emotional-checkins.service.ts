@@ -133,14 +133,10 @@ export class EmotionalCheckinsService {
 
     const saved = await this.repo.save(row);
     await this.studentActivity.record(userId, { type: 'checkin' });
-    await this.dayEntries.create(userId, {
-      entryType: 'checkin',
-      entryDate: checkInDate,
-      payload: {
-        mood: saved.mood,
-        factors: Array.isArray(saved.factors) ? saved.factors : [],
-        note: saved.note,
-      },
+    await this.dayEntries.upsertCheckinForDate(userId, checkInDate, {
+      mood: saved.mood,
+      factors: Array.isArray(saved.factors) ? saved.factors : [],
+      note: saved.note,
     });
 
     return this.toDto(saved);

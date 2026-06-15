@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CreateDayEntryDto } from './dto/create-day-entry.dto';
 import { DayEntriesQueryDto } from './dto/day-entries-query.dto';
 import { DayEntry, DayEntryType } from './entities/day-entry.entity';
@@ -46,6 +46,37 @@ export class DayEntriesService {
     });
     const saved = await this.repo.save(row);
     return this.toDto(saved);
+  }
+
+  /** Un solo check-in por día: actualiza el existente o crea uno nuevo. */
+  async upsertCheckinForDate(
+    userId: string,
+    entryDate: string,
+    payload: Record<string, unknown>,
+  ): Promise<DayEntryDto> {
+    const existing = await this.repo.find({
+      where: { userId, entryDate, entryType: 'checkin' },
+      order: { occurredAt: 'ASC', createdAt: 'ASC' },
+    });
+
+    if (existing.length > 0) {
+      const primary = existing[0];
+      primary.payload = payload;
+      const saved = await this.repo.save(primary);
+
+      if (existing.length > 1) {
+        const duplicateIds = existing.slice(1).map((row) => row.id);
+        await this.repo.delete({ userId, id: In(duplicateIds) });
+      }
+
+      return this.toDto(saved);
+    }
+
+    return this.create(userId, {
+      entryType: 'checkin',
+      entryDate,
+      payload,
+    });
   }
 
   async listByDate(userId: string, query: DayEntriesQueryDto): Promise<DayEntryDto[]> {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronRight, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGamification } from "../../../../gamification/gamification-context";
 import { NewTaskModal } from "../../../../tasks/components/NewTaskModal";
@@ -45,6 +45,7 @@ export function TareasTab({ course }: TareasTabProps) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<StudentTask | null>(null);
 
   const list = getTasksForCourse(course.id);
   const serverCourseId = resolveServerCourseId(course.id) ?? course.id;
@@ -195,13 +196,23 @@ export function TareasTab({ course }: TareasTabProps) {
                     <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--bg-input)]">
                       <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${prog}%` }} />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void deleteTask(task.assignmentId)}
-                      className="mt-3 text-xs text-[var(--error)] hover:underline"
-                    >
-                      Eliminar tarea
-                    </button>
+                    <div className="mt-3 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTask(task)}
+                        className="inline-flex items-center gap-1 text-xs text-[var(--text-primary)] hover:underline"
+                      >
+                        <Pencil className="h-3 w-3" aria-hidden />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteTask(task.assignmentId)}
+                        className="text-xs text-[var(--error)] hover:underline"
+                      >
+                        Eliminar tarea
+                      </button>
+                    </div>
                   </div>
                 )}
               </motion.li>
@@ -214,6 +225,14 @@ export function TareasTab({ course }: TareasTabProps) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         defaultCourseId={serverCourseId}
+        lockCourse
+      />
+
+      <NewTaskModal
+        open={Boolean(editingTask)}
+        onClose={() => setEditingTask(null)}
+        task={editingTask}
+        lockCourse
       />
     </div>
   );

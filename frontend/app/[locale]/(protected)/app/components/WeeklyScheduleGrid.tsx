@@ -7,13 +7,21 @@ import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "../lib/calendar-event-types";
 import { type ScheduleEventKind } from "../lib/mock-student-data";
+import {
+  buildHourMarks,
+  buildSlotMarks,
+  computeEventGeometry,
+  DAY_END_MINUTES,
+  DAY_START_MINUTES,
+  formatHourLabel,
+  gridHeight,
+  layoutDayEvents,
+  minutesToTime,
+  SLOT_MINUTES,
+} from "../lib/schedule-grid-utils";
 
-const DAY_START_MINUTES = 7 * 60;
-const DAY_END_MINUTES = 22 * 60;
-const SLOT_MINUTES = 30;
 const PIXELS_PER_MINUTE = 1.2;
-const TOTAL_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
-const GRID_HEIGHT = TOTAL_MINUTES * PIXELS_PER_MINUTE;
+const GRID_HEIGHT = gridHeight(PIXELS_PER_MINUTE);
 const TIME_AXIS_WIDTH = 64;
 const GAP_PX = 3;
 
@@ -44,103 +52,6 @@ const KIND_STRONG: Record<ScheduleEventKind, string> = {
   extra: "var(--schedule-extra-strong)",
   exam: "var(--schedule-exam-strong)",
 };
-
-function timeToMinutes(value: string): number {
-  const [hour = 0, minute = 0] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function eventsOverlap(
-  a: { startMin: number; endMin: number },
-  b: { startMin: number; endMin: number },
-): boolean {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
-}
-
-type TimedEvent = CalendarEvent & { startMin: number; endMin: number };
-type LaidOutEvent = TimedEvent & { column: number; totalColumns: number };
-
-function layoutDayEvents(events: CalendarEvent[]): LaidOutEvent[] {
-  const items: TimedEvent[] = events
-    .map((e) => ({
-      ...e,
-      startMin: timeToMinutes(e.startTime),
-      endMin: timeToMinutes(e.endTime),
-    }))
-    .filter((e) => e.endMin > e.startMin)
-    .sort((a, b) => a.startMin - b.startMin);
-
-  if (items.length === 0) return [];
-
-  const clusters: TimedEvent[][] = [];
-  for (const ev of items) {
-    let merged = false;
-    for (const cluster of clusters) {
-      if (cluster.some((c) => eventsOverlap(c, ev))) {
-        cluster.push(ev);
-        merged = true;
-        break;
-      }
-    }
-    if (!merged) clusters.push([ev]);
-  }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < clusters.length; i++) {
-      for (let j = i + 1; j < clusters.length; j++) {
-        const overlaps = clusters[i].some((a) =>
-          clusters[j].some((b) => eventsOverlap(a, b)),
-        );
-        if (overlaps) {
-          clusters[i] = [...clusters[i], ...clusters[j]];
-          clusters.splice(j, 1);
-          changed = true;
-          break;
-        }
-      }
-      if (changed) break;
-    }
-  }
-
-  const result: LaidOutEvent[] = [];
-  for (const cluster of clusters) {
-    const columnEnds: number[] = [];
-    const assigned: { ev: TimedEvent; col: number }[] = [];
-    for (const ev of [...cluster].sort((a, b) => a.startMin - b.startMin)) {
-      let col = columnEnds.findIndex((end) => end <= ev.startMin);
-      if (col === -1) {
-        col = columnEnds.length;
-        columnEnds.push(ev.endMin);
-      } else {
-        columnEnds[col] = ev.endMin;
-      }
-      assigned.push({ ev, col });
-    }
-    const totalColumns = columnEnds.length;
-    for (const { ev, col } of assigned) {
-      result.push({ ...ev, column: col, totalColumns });
-    }
-  }
-  return result;
-}
-
-function formatHourLabel(minutes: number, locale: "es" | "en"): string {
-  const h = Math.floor(minutes / 60);
-  if (locale === "es") {
-    return `${String(h).padStart(2, "0")}:00`;
-  }
-  const suffix = h >= 12 ? "PM" : "AM";
-  const display = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${display} ${suffix}`;
-}
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -175,17 +86,8 @@ export function WeeklyScheduleGrid({
     [weekStart, today],
   );
 
-  const hourMarks = useMemo(() => {
-    const marks: number[] = [];
-    for (let m = DAY_START_MINUTES; m <= DAY_END_MINUTES; m += 60) marks.push(m);
-    return marks;
-  }, []);
-
-  const slotMarks = useMemo(() => {
-    const marks: number[] = [];
-    for (let m = DAY_START_MINUTES; m < DAY_END_MINUTES; m += SLOT_MINUTES) marks.push(m);
-    return marks;
-  }, []);
+  const hourMarks = useMemo(() => buildHourMarks(), []);
+  const slotMarks = useMemo(() => buildSlotMarks(), []);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -193,7 +95,7 @@ export function WeeklyScheduleGrid({
       if (!map.has(e.date)) map.set(e.date, []);
       map.get(e.date)!.push(e);
     }
-    const out = new Map<string, LaidOutEvent[]>();
+    const out = new Map<string, ReturnType<typeof layoutDayEvents>>();
     for (const [key, list] of map) out.set(key, layoutDayEvents(list));
     return out;
   }, [events]);
@@ -201,57 +103,58 @@ export function WeeklyScheduleGrid({
   const nowMinutes = today.getHours() * 60 + today.getMinutes();
   const showNowLine =
     nowMinutes >= DAY_START_MINUTES && nowMinutes <= DAY_END_MINUTES;
-  const todayIndex = weekDays.findIndex((d) => d.isToday);
+
+  const gridColumns = `${TIME_AXIS_WIDTH}px repeat(7, minmax(0, 1fr))`;
 
   return (
     <div className="schedule-week student-card flex flex-col overflow-hidden">
-      {/* Cabecera de días */}
-      <div
-        className="grid sticky top-0 z-10 border-b border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
-        style={{ gridTemplateColumns: `${TIME_AXIS_WIDTH}px repeat(7, minmax(0, 1fr))` }}
-      >
-        <div className="px-3 py-3 text-[10px] uppercase tracking-wider text-[var(--app-fg-muted)]" />
-        {weekDays.map((d) => (
-          <div
-            key={d.key}
-            className={cn(
-              "flex flex-col items-start gap-0.5 border-l border-[var(--app-border)] px-3 py-3",
-              d.isToday && "bg-[var(--app-primary)]/5",
-            )}
-          >
-            <span
+      <div className="relative overflow-auto [scrollbar-gutter:stable]">
+        {/* Cabecera de días — dentro del scroll para alinear columnas */}
+        <div
+          className="grid sticky top-0 z-10 border-b border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
+          style={{ gridTemplateColumns: gridColumns }}
+        >
+          <div className="px-3 py-3 text-[10px] uppercase tracking-wider text-[var(--app-fg-muted)]" />
+          {weekDays.map((d) => (
+            <div
+              key={d.key}
               className={cn(
-                "text-[10px] font-semibold uppercase tracking-wider",
-                d.isToday ? "text-[var(--app-primary)]" : "text-[var(--app-fg-muted)]",
+                "flex flex-col items-start gap-0.5 border-l border-[var(--app-border)] px-3 py-3",
+                d.isToday && "bg-[var(--app-primary)]/5",
               )}
             >
-              {format(d.date, "EEE", { locale: dateFnsLocale })}
-            </span>
-            <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  "text-xl font-semibold",
-                  d.isToday ? "text-[var(--app-primary)]" : "text-[var(--app-fg)]",
+                  "text-[10px] font-semibold uppercase tracking-wider",
+                  d.isToday ? "text-[var(--app-primary)]" : "text-[var(--app-fg-muted)]",
                 )}
               >
-                {format(d.date, "d")}
+                {format(d.date, "EEE", { locale: dateFnsLocale })}
               </span>
-              {d.isToday && (
-                <span className="rounded-full bg-[var(--app-primary)]/20 px-2 py-0.5 text-[10px] font-medium text-[var(--app-primary)]">
-                  {t("today")}
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "text-xl font-semibold",
+                    d.isToday ? "text-[var(--app-primary)]" : "text-[var(--app-fg)]",
+                  )}
+                >
+                  {format(d.date, "d")}
                 </span>
-              )}
+                {d.isToday && (
+                  <span className="rounded-full bg-[var(--app-primary)]/20 px-2 py-0.5 text-[10px] font-medium text-[var(--app-primary)]">
+                    {t("today")}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* Cuerpo de grid */}
-      <div className="relative overflow-auto">
+        {/* Cuerpo de grid */}
         <div
           className="relative grid"
           style={{
-            gridTemplateColumns: `${TIME_AXIS_WIDTH}px repeat(7, minmax(0, 1fr))`,
+            gridTemplateColumns: gridColumns,
             minHeight: GRID_HEIGHT,
           }}
         >
@@ -287,7 +190,7 @@ export function WeeklyScheduleGrid({
               <div
                 key={d.key}
                 className={cn(
-                  "relative border-l border-[var(--app-border)]",
+                  "relative overflow-hidden border-l border-[var(--app-border)]",
                   d.isToday && "bg-[var(--app-primary)]/[0.03]",
                 )}
                 style={{ height: GRID_HEIGHT }}
@@ -322,11 +225,11 @@ export function WeeklyScheduleGrid({
 
                 {/* Eventos */}
                 {dayLaid.map((event) => {
-                  const top = (event.startMin - DAY_START_MINUTES) * PIXELS_PER_MINUTE + 1;
-                  const height = Math.max(
-                    (event.endMin - event.startMin) * PIXELS_PER_MINUTE - GAP_PX,
-                    28,
-                  ) - 1;
+                  const { top, height } = computeEventGeometry(
+                    event.startMin,
+                    event.endMin,
+                    { pixelsPerMinute: PIXELS_PER_MINUTE, gapPx: GAP_PX, minHeight: 28 },
+                  );
                   const widthPct = 100 / event.totalColumns;
                   const leftPct = (event.column / event.totalColumns) * 100;
                   return (

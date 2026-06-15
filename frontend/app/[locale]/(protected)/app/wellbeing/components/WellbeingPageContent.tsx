@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { StudentPageShell } from "../../components/StudentPageShell";
@@ -7,6 +8,7 @@ import { WellbeingCheckInBlock } from "./WellbeingCheckInBlock";
 import { WellbeingCheckInProvider } from "./WellbeingCheckInContext";
 import { useWellbeingCheckInContext } from "./WellbeingCheckInContext";
 import { WellbeingDayProvider } from "./WellbeingDayProvider";
+import { useWellbeingDayContext } from "./WellbeingDayProvider";
 import { DayDiaryView } from "./DayDiaryView";
 import { WellbeingDataSidebar } from "./WellbeingDataSidebar";
 
@@ -14,6 +16,17 @@ type WellbeingPageContentProps = {
   bare?: boolean;
   showDisclaimer?: boolean;
 };
+
+function CheckInDaySync() {
+  const { savedFlash } = useWellbeingCheckInContext();
+  const { reload } = useWellbeingDayContext();
+
+  useEffect(() => {
+    if (savedFlash) void reload();
+  }, [savedFlash, reload]);
+
+  return null;
+}
 
 function WellbeingStateSwitcher() {
   const { hydrated, hasCheckedInToday, isEditing } = useWellbeingCheckInContext();
@@ -51,6 +64,7 @@ function WellbeingPageLayout({ showDisclaimer }: { showDisclaimer: boolean }) {
 
   return (
     <div className="wellbeing-calm-page pb-12">
+      <CheckInDaySync />
       <div className="mx-auto flex w-full flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-[65]">
           <WellbeingStateSwitcher />

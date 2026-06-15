@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useGamification } from "../../../gamification/gamification-context";
 import { useStudentTasks } from "../../context/student-tasks-context";
 import type { StudentTask } from "../../lib/task-types";
+import { NewTaskModal } from "../NewTaskModal";
 import {
   formatEstimatedTime,
   getCourseStyle,
@@ -38,6 +39,7 @@ export function TaskCard({ task }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [checkAnimating, setCheckAnimating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const courseStyle = getCourseStyle(task.courseColorToken);
   const timeLabel = formatEstimatedTime(task.estimatedHours, task.estimatedMinutes);
@@ -220,8 +222,8 @@ export function TaskCard({ task }: TaskCardProps) {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              disabled
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--app-surface-soft)] px-3 py-1.5 text-xs text-[var(--app-fg-muted)] opacity-60"
+              onClick={() => setEditOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--app-surface-soft)] px-3 py-1.5 text-xs text-[var(--app-fg)] transition-colors hover:bg-[var(--app-border)]"
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden />
               Editar
@@ -237,6 +239,12 @@ export function TaskCard({ task }: TaskCardProps) {
           </div>
         </div>
       </div>
+
+      <NewTaskModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        task={task}
+      />
     </motion.article>
   );
 }

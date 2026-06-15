@@ -60,7 +60,7 @@ type StudentTasksContextValue = {
   setSearchQuery: (q: string) => void;
   setActiveFilter: (f: TaskFilterId) => void;
   refresh: () => Promise<void>;
-  createTask: (input: CreateTaskInput) => Promise<void>;
+  createTask: (input: CreateTaskInput) => Promise<string | undefined>;
   updateTask: (assignmentId: string, input: UpdateTaskInput) => Promise<void>;
   deleteTask: (assignmentId: string) => Promise<void>;
   setStatus: (assignmentId: string, status: TaskStatus) => Promise<void>;
@@ -169,8 +169,8 @@ export function StudentTasksProvider({ children }: { children: ReactNode }) {
   );
 
   const createTask = useCallback(
-    async (input: CreateTaskInput) => {
-      if (!token || !workspaceId) return;
+    async (input: CreateTaskInput): Promise<string | undefined> => {
+      if (!token || !workspaceId) return undefined;
       const serverCourseId = resolveServerCourseId(input.courseId) ?? input.courseId;
       const assignment = await createUniversityAssignment(token, workspaceId, {
         courseId: serverCourseId,
@@ -183,6 +183,7 @@ export function StudentTasksProvider({ children }: { children: ReactNode }) {
         classSessionId: input.classSessionId ?? undefined,
       });
       study.upsertAssignmentInState(assignment);
+      return assignment.id;
     },
     [token, workspaceId, resolveServerCourseId, study],
   );
