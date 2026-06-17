@@ -21,6 +21,7 @@ function course(
     colorToken: "violet",
     notes: null,
     approvedAt: null,
+    approvedGrade: null,
     failedAt: null,
     sortOrder: 0,
     prerequisiteIds: [],
