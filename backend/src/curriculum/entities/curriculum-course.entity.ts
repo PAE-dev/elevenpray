@@ -55,6 +55,9 @@ export class CurriculumCourse {
   @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
   approvedAt: Date | null;
 
+  @Column({ name: 'approved_grade', type: 'text', nullable: true })
+  approvedGrade: string | null;
+
   @Column({ name: 'failed_at', type: 'timestamptz', nullable: true })
   failedAt: Date | null;
 

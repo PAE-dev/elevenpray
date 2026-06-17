@@ -10,9 +10,11 @@ import {
   STUDENT_MODAL_INPUT,
   STUDENT_MODAL_LABEL,
 } from "../../components/student-modal-classes";
-import type { CurriculumCourse, CourseColorToken } from "@/app/lib/curriculum/types";
+import type { CurriculumCourse, CourseColorToken, CurriculumStatus } from "@/app/lib/curriculum/types";
 import { CURRICULUM_COLOR_TOKENS } from "@/app/lib/curriculum/types";
 import { cycleToRoman } from "@/app/lib/curriculum/curriculum-utils";
+import type { StudentGradeScale } from "@/lib/student-grade-scale";
+import { ApprovedGradeField } from "./ApprovedGradeField";
 
 export interface MallaCourseFormValues {
   name: string;
@@ -21,6 +23,8 @@ export interface MallaCourseFormValues {
   cycleNumber: number;
   colorToken: CourseColorToken;
   prerequisiteIds: string[];
+  status: CurriculumStatus;
+  approvedGrade: string;
 }
 
 interface MallaCourseFormProps {
@@ -30,6 +34,7 @@ interface MallaCourseFormProps {
   allCourses: CurriculumCourse[];
   defaultCycle?: number;
   maxCycle?: number;
+  gradeScale?: StudentGradeScale | null;
   onClose: () => void;
   onSubmit: (values: MallaCourseFormValues) => Promise<void>;
 }
@@ -41,6 +46,7 @@ export function MallaCourseForm({
   allCourses,
   defaultCycle = 1,
   maxCycle = 12,
+  gradeScale,
   onClose,
   onSubmit,
 }: MallaCourseFormProps) {
@@ -53,6 +59,8 @@ export function MallaCourseForm({
   const [cycleNumber, setCycleNumber] = useState(defaultCycle);
   const [colorToken, setColorToken] = useState<CourseColorToken>("violet");
   const [prerequisiteIds, setPrerequisiteIds] = useState<string[]>([]);
+  const [status, setStatus] = useState<CurriculumStatus>("pending");
+  const [approvedGrade, setApprovedGrade] = useState("");
   const [prereqSearch, setPrereqSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +70,8 @@ export function MallaCourseForm({
       code: `${uid}-code`,
       credits: `${uid}-credits`,
       cycle: `${uid}-cycle`,
+      status: `${uid}-status`,
+      approvedGrade: `${uid}-approved-grade`,
       prereqSearch: `${uid}-prereq-search`,
     }),
     [uid],
@@ -76,6 +86,8 @@ export function MallaCourseForm({
       setCycleNumber(initial.cycleNumber);
       setColorToken(initial.colorToken);
       setPrerequisiteIds(initial.prerequisiteIds);
+      setStatus(initial.status);
+      setApprovedGrade(initial.approvedGrade ?? "");
     } else {
       setName("");
       setCode("");
@@ -83,6 +95,8 @@ export function MallaCourseForm({
       setCycleNumber(defaultCycle);
       setColorToken("violet");
       setPrerequisiteIds([]);
+      setStatus("pending");
+      setApprovedGrade("");
     }
     setPrereqSearch("");
     const tFocus = window.setTimeout(() => nameInputRef.current?.focus(), 0);
@@ -123,6 +137,8 @@ export function MallaCourseForm({
         cycleNumber,
         colorToken,
         prerequisiteIds,
+        status,
+        approvedGrade: status === "approved" ? approvedGrade.trim() : "",
       });
       onClose();
     } finally {
@@ -245,6 +261,39 @@ export function MallaCourseForm({
             ))}
           </select>
         </div>
+
+        <div className={cn("mt-4", STUDENT_MODAL_FIELD)}>
+          <label htmlFor={fieldIds.status} className={STUDENT_MODAL_LABEL}>
+            {t("formStatus")}
+          </label>
+          <select
+            id={fieldIds.status}
+            value={status}
+            onChange={(e) => {
+              const next = e.target.value as CurriculumStatus;
+              setStatus(next);
+              if (next !== "approved") setApprovedGrade("");
+            }}
+            className={cn(STUDENT_MODAL_INPUT, "mt-1 cursor-pointer")}
+          >
+            <option value="pending">{t("status_pending")}</option>
+            <option value="in_progress">{t("status_in_progress")}</option>
+            <option value="approved">{t("status_approved")}</option>
+            <option value="failed">{t("status_failed")}</option>
+          </select>
+        </div>
+
+        {status === "approved" ? (
+          <ApprovedGradeField
+            id={fieldIds.approvedGrade}
+            label={t("formApprovedGrade")}
+            hint={t("formApprovedGradeHint")}
+            gradeScale={gradeScale}
+            value={approvedGrade}
+            onChange={setApprovedGrade}
+            className="mt-4"
+          />
+        ) : null}
 
         <div className="mt-4">
           <span className={STUDENT_MODAL_LABEL}>{t("formColor")}</span>

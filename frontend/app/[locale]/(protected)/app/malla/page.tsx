@@ -26,7 +26,7 @@ function prereqIdsEqual(a: string[], b: string[]): boolean {
 
 export default function MallaPage() {
   const t = useTranslations("studentMalla");
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const {
     state,
     loading,
@@ -67,14 +67,17 @@ export default function MallaPage() {
   );
 
   const handleStatusChange = useCallback(
-    async (status: CurriculumStatus, force?: boolean) => {
+    async (
+      status: CurriculumStatus,
+      options?: { force?: boolean; approvedGrade?: string },
+    ) => {
       if (!selectedId || !selectedCourse) return;
       const courseName = selectedCourse.name;
       if (status === "approved") {
         fireConfetti();
       }
       try {
-        await setStatus(selectedId, status, force);
+        await setStatus(selectedId, status, options);
         toast.success(t("toastStatusChangedTitle"), toastStatusDesc(status, courseName));
       } catch (e) {
         toast.error(
@@ -84,6 +87,22 @@ export default function MallaPage() {
       }
     },
     [selectedId, selectedCourse, setStatus, t, toastStatusDesc],
+  );
+
+  const handleApprovedGradeChange = useCallback(
+    async (approvedGrade: string) => {
+      if (!selectedId || !selectedCourse || selectedCourse.status !== "approved") return;
+      try {
+        await updateCourse(selectedId, { approvedGrade });
+        toast.success(t("toastCourseUpdatedTitle"), t("toastApprovedGradeUpdatedDesc"));
+      } catch (e) {
+        toast.error(
+          t("toastErrorTitle"),
+          e instanceof Error ? e.message : t("errorLoad"),
+        );
+      }
+    },
+    [selectedId, selectedCourse, updateCourse, t],
   );
 
   const handleFormSubmit = useCallback(
@@ -101,6 +120,9 @@ export default function MallaPage() {
             cycleNumber: values.cycleNumber,
             colorToken: values.colorToken,
             prerequisiteIds: values.prerequisiteIds,
+            status: values.status,
+            approvedGrade:
+              values.status === "approved" ? values.approvedGrade || undefined : undefined,
           });
           if (prereqsChanged) {
             toast.success(
@@ -121,7 +143,13 @@ export default function MallaPage() {
             cycleNumber: values.cycleNumber,
             colorToken: values.colorToken,
             prerequisiteIds: values.prerequisiteIds,
+            status: values.status,
+            approvedGrade:
+              values.status === "approved" ? values.approvedGrade || undefined : undefined,
           });
+          if (values.status === "approved") {
+            fireConfetti();
+          }
           toast.success(
             t("toastCourseCreatedTitle"),
             t("toastCourseCreatedDesc", { name: values.name }),
@@ -197,6 +225,7 @@ export default function MallaPage() {
         <MallaCourseDetail
           course={selectedCourse}
           getCourseById={getCourseById}
+          gradeScale={user?.studentProfile?.gradeScale}
           open
           onClose={() => setSelectedId(null)}
           onEdit={() => {
@@ -206,6 +235,7 @@ export default function MallaPage() {
           }}
           onDelete={() => setDeleting(selectedCourse)}
           onStatusChange={handleStatusChange}
+          onApprovedGradeChange={handleApprovedGradeChange}
         />
       )}
 
@@ -216,6 +246,7 @@ export default function MallaPage() {
         allCourses={state?.courses ?? []}
         defaultCycle={cycleNumbers[0] ?? 1}
         maxCycle={totalCycles > 0 ? totalCycles : 12}
+        gradeScale={user?.studentProfile?.gradeScale}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);

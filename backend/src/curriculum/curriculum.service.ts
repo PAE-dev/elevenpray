@@ -40,6 +40,7 @@ export interface CurriculumCourseView {
   colorToken: string;
   notes: string | null;
   approvedAt: string | null;
+  approvedGrade: string | null;
   failedAt: string | null;
   sortOrder: number;
   prerequisiteIds: string[];
@@ -96,6 +97,15 @@ export class CurriculumService {
 
   private creditsToNumber(value: string): number {
     return Number.parseFloat(value) || 0;
+  }
+
+  private normalizeApprovedGrade(
+    status: CurriculumCourseStatus,
+    grade?: string | null,
+  ): string | null {
+    if (status !== 'approved') return null;
+    const trimmed = grade?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : null;
   }
 
   private async loadEdgesForUser(userId: string): Promise<PrerequisiteEdge[]> {
@@ -319,6 +329,7 @@ export class CurriculumService {
         colorToken: c.colorToken,
         notes: c.notes,
         approvedAt: c.approvedAt?.toISOString() ?? null,
+        approvedGrade: c.approvedGrade,
         failedAt: c.failedAt?.toISOString() ?? null,
         sortOrder: c.sortOrder,
         prerequisiteIds,
@@ -409,6 +420,10 @@ export class CurriculumService {
         colorToken: dto.colorToken ?? 'violet',
         sortOrder: count,
         approvedAt: dto.status === 'approved' ? new Date() : null,
+        approvedGrade: this.normalizeApprovedGrade(
+          dto.status ?? 'pending',
+          dto.approvedGrade,
+        ),
         failedAt: dto.status === 'failed' ? new Date() : null,
       }),
     );
@@ -434,6 +449,45 @@ export class CurriculumService {
     if (dto.cycleNumber != null) course.cycleNumber = dto.cycleNumber;
     if (dto.colorToken != null) course.colorToken = dto.colorToken;
     if (dto.notes !== undefined) course.notes = dto.notes;
+
+    if (dto.status != null) {
+      const prevStatus = course.status;
+      course.status = dto.status;
+      if (dto.status === 'approved') {
+        course.approvedAt = course.approvedAt ?? new Date();
+        course.failedAt = null;
+      } else if (dto.status === 'failed') {
+        course.failedAt = course.failedAt ?? new Date();
+        course.approvedAt = null;
+        course.approvedGrade = null;
+      } else {
+        course.approvedAt = null;
+        course.approvedGrade = null;
+        course.failedAt = null;
+      }
+      if (dto.status === 'in_progress' && prevStatus !== 'in_progress') {
+        await this.syncToActiveCourse(course, userId);
+      } else if (
+        (dto.status === 'pending' || dto.status === 'failed') &&
+        prevStatus === 'in_progress'
+      ) {
+        await this.archiveLinkedCourse(courseId, userId);
+      } else if (dto.status === 'approved' && prevStatus === 'in_progress') {
+        const linked = await this.findLinkedCourse(courseId, userId);
+        if (linked) {
+          await this.courseRepo.update({ id: linked.id }, { archived: true });
+        }
+      }
+    }
+
+    if (dto.approvedGrade !== undefined) {
+      course.approvedGrade = this.normalizeApprovedGrade(
+        course.status,
+        dto.approvedGrade,
+      );
+    } else if (dto.status != null && dto.status !== 'approved') {
+      course.approvedGrade = null;
+    }
 
     await this.curriculumRepo.save(course);
 
@@ -492,8 +546,17 @@ export class CurriculumService {
     course.status = dto.status;
     course.approvedAt = dto.status === 'approved' ? new Date() : null;
     course.failedAt = dto.status === 'failed' ? new Date() : null;
-    if (dto.status !== 'approved') course.approvedAt = null;
+    if (dto.status !== 'approved') {
+      course.approvedAt = null;
+      course.approvedGrade = null;
+    }
     if (dto.status !== 'failed') course.failedAt = null;
+    if (dto.status === 'approved') {
+      course.approvedGrade = this.normalizeApprovedGrade(
+        dto.status,
+        dto.approvedGrade ?? course.approvedGrade,
+      );
+    }
 
     await this.curriculumRepo.save(course);
 

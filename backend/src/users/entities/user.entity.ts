@@ -65,6 +65,9 @@ export class User {
   @Column({ name: 'referred_at', type: 'timestamptz', nullable: true })
   referredAt: Date | null;
 
+  @Column({ name: 'whatsapp_phone', type: 'text', nullable: true })
+  whatsappPhone: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

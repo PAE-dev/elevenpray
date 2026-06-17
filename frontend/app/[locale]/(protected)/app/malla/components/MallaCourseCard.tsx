@@ -77,7 +77,9 @@ function MallaCourseCardInner({ course, blockedNames = [], onClick }: MallaCours
             statusStyle.ring,
           )}
         >
-          {t(`status_${course.status}`)}
+          {course.status === "approved" && course.approvedGrade
+            ? `${t(`status_${course.status}`)} · ${course.approvedGrade}`
+            : t(`status_${course.status}`)}
         </span>
       </div>
     </button>

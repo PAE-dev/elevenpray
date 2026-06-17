@@ -34,6 +34,7 @@ import { EmotionalCheckinsModule } from './emotional-checkins/emotional-checkins
 import { DayEntriesModule } from './day-entries/day-entries.module';
 import { InternalResourcesModule } from './internal-resources/internal-resources.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     DayEntriesModule,
     InternalResourcesModule,
     ReferralsModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [AppService],

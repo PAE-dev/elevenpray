@@ -60,6 +60,11 @@ export class CreateCurriculumCourseDto {
   @IsOptional()
   @IsIn(STATUSES)
   status?: CurriculumCourseStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  approvedGrade?: string;
 }
 
 export class UpdateCurriculumCourseDto {
@@ -97,6 +102,15 @@ export class UpdateCurriculumCourseDto {
   notes?: string;
 
   @IsOptional()
+  @IsIn(STATUSES)
+  status?: CurriculumCourseStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  approvedGrade?: string;
+
+  @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
   prerequisiteIds?: string[];
@@ -109,6 +123,11 @@ export class SetCurriculumStatusDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  approvedGrade?: string;
 }
 
 export class ReorderCurriculumCoursesDto {

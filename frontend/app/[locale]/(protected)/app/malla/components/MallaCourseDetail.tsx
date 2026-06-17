@@ -1,21 +1,29 @@
 "use client";
 
+import { useEffect, useId, useState } from "react";
 import { BookOpen, Check, Clock, Pencil, Trash2, X, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { CurriculumCourse, CurriculumStatus } from "@/app/lib/curriculum/types";
 import { STATUS_BUTTON_CLASSES } from "@/app/lib/curriculum/types";
 import { cycleToRoman } from "@/app/lib/curriculum/curriculum-utils";
+import type { StudentGradeScale } from "@/lib/student-grade-scale";
 import { STUDENT_MODAL_PANEL } from "../../components/student-modal-classes";
+import { ApprovedGradeField } from "./ApprovedGradeField";
 import { cn } from "@/lib/utils";
 
 interface MallaCourseDetailProps {
   course: CurriculumCourse;
   getCourseById: (id: string) => CurriculumCourse | null;
+  gradeScale?: StudentGradeScale | null;
   open: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onStatusChange: (status: CurriculumStatus, force?: boolean) => void;
+  onStatusChange: (
+    status: CurriculumStatus,
+    options?: { force?: boolean; approvedGrade?: string },
+  ) => void;
+  onApprovedGradeChange?: (approvedGrade: string) => void;
 }
 
 const STATUS_OPTIONS: {
@@ -31,13 +39,23 @@ const STATUS_OPTIONS: {
 export function MallaCourseDetail({
   course,
   getCourseById,
+  gradeScale,
   open,
   onClose,
   onEdit,
   onDelete,
   onStatusChange,
+  onApprovedGradeChange,
 }: MallaCourseDetailProps) {
   const t = useTranslations("studentMalla");
+  const uid = useId();
+  const [approvedGradeDraft, setApprovedGradeDraft] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setApprovedGradeDraft(course.approvedGrade ?? "");
+  }, [open, course.id, course.approvedGrade]);
+
   if (!open) return null;
 
   const prereqs = course.prerequisiteIds
@@ -47,6 +65,28 @@ export function MallaCourseDetail({
     .map((id) => getCourseById(id))
     .filter(Boolean) as CurriculumCourse[];
   const locked = !course.isUnlocked && course.status === "pending";
+
+  const handleStatusClick = (status: CurriculumStatus) => {
+    if (status === "in_progress" && locked) {
+      onStatusChange(status, { force: true });
+      return;
+    }
+    if (status === "approved") {
+      onStatusChange(status, {
+        approvedGrade: approvedGradeDraft.trim() || undefined,
+      });
+      return;
+    }
+    onStatusChange(status);
+  };
+
+  const handleApprovedGradeBlur = () => {
+    if (course.status !== "approved" || !onApprovedGradeChange) return;
+    const next = approvedGradeDraft.trim();
+    const current = course.approvedGrade?.trim() ?? "";
+    if (next === current) return;
+    onApprovedGradeChange(next);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -97,7 +137,7 @@ export function MallaCourseDetail({
                 key={status}
                 type="button"
                 disabled={status === "in_progress" && locked}
-                onClick={() => onStatusChange(status, status === "in_progress" && locked)}
+                onClick={() => handleStatusClick(status)}
                 className={cn(
                   "flex cursor-pointer select-none flex-col items-center gap-2 rounded-xl border px-2 py-3 text-xs font-semibold transition active:scale-[0.98]",
                   STATUS_BUTTON_CLASSES[status],
@@ -113,12 +153,22 @@ export function MallaCourseDetail({
           {locked && (
             <button
               type="button"
-              onClick={() => onStatusChange("in_progress", true)}
+              onClick={() => onStatusChange("in_progress", { force: true })}
               className="mt-2 text-xs text-[var(--accent)] underline"
             >
               {t("forceUnlock")}
             </button>
           )}
+          <ApprovedGradeField
+            id={`${uid}-approved-grade`}
+            label={t("formApprovedGrade")}
+            hint={t("formApprovedGradeHint")}
+            gradeScale={gradeScale}
+            value={approvedGradeDraft}
+            onChange={setApprovedGradeDraft}
+            onBlur={handleApprovedGradeBlur}
+            className="mt-4"
+          />
         </div>
 
         {prereqs.length > 0 && (

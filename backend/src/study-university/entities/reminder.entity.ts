@@ -40,6 +40,18 @@ export class Reminder {
   @Column({ name: 'external_ref', type: 'text', nullable: true })
   externalRef: string | null;
 
+  @Column({ name: 'sent_at', type: 'timestamptz', nullable: true })
+  sentAt: Date | null;
+
+  @Column({ name: 'delivery_status', type: 'text', default: 'pending' })
+  deliveryStatus: string;
+
+  @Column({ name: 'last_error', type: 'text', nullable: true })
+  lastError: string | null;
+
+  @Column({ name: 'attempt_count', type: 'int', default: 0 })
+  attemptCount: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

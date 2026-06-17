@@ -29,6 +29,7 @@ function applyStatusPatch(
   courses: CurriculumCourse[],
   courseId: string,
   status: CurriculumStatus,
+  approvedGrade?: string | null,
 ): CurriculumCourse[] {
   return courses.map((c) =>
     c.id === courseId
@@ -36,6 +37,12 @@ function applyStatusPatch(
           ...c,
           status,
           approvedAt: status === "approved" ? new Date().toISOString() : null,
+          approvedGrade:
+            status === "approved"
+              ? approvedGrade !== undefined
+                ? approvedGrade
+                : c.approvedGrade
+              : null,
           failedAt: status === "failed" ? new Date().toISOString() : null,
         }
       : c,
@@ -128,8 +135,9 @@ export function useCurriculum() {
           status: input.status ?? "pending",
           colorToken: input.colorToken ?? "violet",
           notes: null,
-          approvedAt: null,
-          failedAt: null,
+          approvedAt: input.status === "approved" ? new Date().toISOString() : null,
+          approvedGrade: input.approvedGrade ?? null,
+          failedAt: input.status === "failed" ? new Date().toISOString() : null,
           sortOrder: prev.courses.filter((c) => c.cycleNumber === input.cycleNumber).length,
           prerequisiteIds: input.prerequisiteIds ?? [],
           unlocksIds: [],
@@ -166,6 +174,10 @@ export function useCurriculum() {
                 ...(input.credits !== undefined ? { credits: input.credits } : {}),
                 ...(input.cycleNumber != null ? { cycleNumber: input.cycleNumber } : {}),
                 ...(input.colorToken != null ? { colorToken: input.colorToken } : {}),
+                ...(input.status != null ? { status: input.status } : {}),
+                ...(input.approvedGrade !== undefined
+                  ? { approvedGrade: input.approvedGrade || null }
+                  : {}),
                 ...(input.prerequisiteIds !== undefined
                   ? { prerequisiteIds: input.prerequisiteIds }
                   : {}),
@@ -187,18 +199,31 @@ export function useCurriculum() {
   );
 
   const setStatus = useCallback(
-    async (courseId: string, status: CurriculumStatus, force?: boolean) => {
+    async (
+      courseId: string,
+      status: CurriculumStatus,
+      options?: { force?: boolean; approvedGrade?: string },
+    ) => {
       if (!token) return;
       const prev = stateRef.current;
       if (!prev) return;
 
       const previousStatus = prev.courses.find((c) => c.id === courseId)?.status;
+      const previousGrade = prev.courses.find((c) => c.id === courseId)?.approvedGrade;
       setState(
-        buildStateFromCourses(prev, applyStatusPatch(prev.courses, courseId, status)),
+        buildStateFromCourses(
+          prev,
+          applyStatusPatch(
+            prev.courses,
+            courseId,
+            status,
+            options?.approvedGrade ?? (status === "approved" ? previousGrade : null),
+          ),
+        ),
       );
 
       try {
-        const data = await setCurriculumCourseStatus(token, courseId, status, force);
+        const data = await setCurriculumCourseStatus(token, courseId, status, options);
         setState(data);
         return { data, previousStatus };
       } catch (e) {
@@ -206,7 +231,7 @@ export function useCurriculum() {
           setState(
             buildStateFromCourses(
               prev,
-              applyStatusPatch(prev.courses, courseId, previousStatus),
+              applyStatusPatch(prev.courses, courseId, previousStatus, previousGrade),
             ),
           );
         }

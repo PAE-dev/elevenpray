@@ -28,6 +28,7 @@ function normalizeCourse(raw: Record<string, unknown>): CurriculumCourse {
     colorToken: (raw.colorToken ?? raw.color_token ?? "violet") as CurriculumCourse["colorToken"],
     notes: (raw.notes ?? null) as string | null,
     approvedAt: (raw.approvedAt ?? raw.approved_at ?? null) as string | null,
+    approvedGrade: (raw.approvedGrade ?? raw.approved_grade ?? null) as string | null,
     failedAt: (raw.failedAt ?? raw.failed_at ?? null) as string | null,
     sortOrder: Number(raw.sortOrder ?? raw.sort_order ?? 0),
     prerequisiteIds: (raw.prerequisiteIds ?? raw.prerequisite_ids ?? []) as string[],
@@ -138,12 +139,16 @@ export async function setCurriculumCourseStatus(
   token: string,
   courseId: string,
   status: CurriculumStatus,
-  force?: boolean,
+  options?: { force?: boolean; approvedGrade?: string },
 ): Promise<CurriculumState> {
   const res = await fetch(`${baseUrl()}/courses/${courseId}/status`, {
     method: "PATCH",
     headers: getAuthHeaders(token),
-    body: JSON.stringify({ status, force }),
+    body: JSON.stringify({
+      status,
+      force: options?.force,
+      approvedGrade: options?.approvedGrade,
+    }),
   });
   return handleResponse(res);
 }

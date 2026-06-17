@@ -16,6 +16,7 @@ export interface CurriculumCourse {
   colorToken: CourseColorToken;
   notes: string | null;
   approvedAt: string | null;
+  approvedGrade: string | null;
   failedAt: string | null;
   sortOrder: number;
   prerequisiteIds: string[];
@@ -60,6 +61,7 @@ export interface CreateCurriculumCourseInput {
   workspaceId?: string;
   prerequisiteIds?: string[];
   status?: CurriculumStatus;
+  approvedGrade?: string;
 }
 
 export interface UpdateCurriculumCourseInput {
@@ -69,6 +71,8 @@ export interface UpdateCurriculumCourseInput {
   cycleNumber?: number;
   colorToken?: CourseColorToken;
   notes?: string;
+  status?: CurriculumStatus;
+  approvedGrade?: string;
   prerequisiteIds?: string[];
 }
 
